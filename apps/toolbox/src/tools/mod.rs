@@ -1,19 +1,29 @@
 //! The tools shown in the sidebar, plus widgets they share. To add a tool: create a module
 //! implementing [`Tool`], then add it to [`all`].
 
+mod color_picker;
+mod color_widgets;
+mod contrast;
 mod cron;
 mod encode;
 mod fake_data;
 mod formats;
+mod gradients;
 mod hashes;
 mod ids;
+mod json_formatter;
 mod jwt;
 mod lorem;
+mod markdown;
 mod names;
 mod number_base;
+mod palettes;
 mod password;
 mod qr;
+mod regex_tester;
+mod sql_formatter;
 mod text_case;
+mod text_diff;
 mod timestamps;
 
 use egui::{Color32, RichText};
@@ -28,15 +38,24 @@ const COPIED_FEEDBACK: Duration = Duration::from_millis(1500);
 pub enum Category {
     Generators,
     Converters,
+    Formatters,
+    Design,
 }
 
 impl Category {
-    pub const ALL: [Category; 2] = [Category::Generators, Category::Converters];
+    pub const ALL: [Category; 4] = [
+        Category::Generators,
+        Category::Converters,
+        Category::Formatters,
+        Category::Design,
+    ];
 
     pub fn label(self) -> &'static str {
         match self {
             Category::Generators => "GENERATORS",
             Category::Converters => "ENCODERS & CONVERTERS",
+            Category::Formatters => "FORMATTERS & TESTERS",
+            Category::Design => "COLOR & DESIGN",
         }
     }
 }
@@ -65,6 +84,15 @@ pub fn all() -> Vec<Box<dyn Tool>> {
         Box::new(number_base::NumberBaseTool::default()),
         Box::new(text_case::TextCaseTool::default()),
         Box::new(cron::CronTool::default()),
+        Box::new(json_formatter::JsonFormatterTool::default()),
+        Box::new(regex_tester::RegexTool::default()),
+        Box::new(text_diff::TextDiffTool::default()),
+        Box::new(sql_formatter::SqlFormatterTool::default()),
+        Box::new(markdown::MarkdownTool::default()),
+        Box::new(color_picker::ColorPickerTool::default()),
+        Box::new(contrast::ContrastTool::default()),
+        Box::new(palettes::PalettesTool::default()),
+        Box::new(gradients::GradientsTool::default()),
     ]
 }
 
@@ -247,4 +275,20 @@ pub fn save_file(
         Ok(()) => format!("Saved to {}", path.display()),
         Err(error) => format!("Couldn't save {}: {error}", path.display()),
     })
+}
+
+/// e.g. "512 bytes", "1.5 MB" (decimal units, as macOS Finder shows them).
+pub fn human_size(bytes: u64) -> String {
+    const UNITS: [&str; 5] = ["bytes", "KB", "MB", "GB", "TB"];
+    let mut size = bytes as f64;
+    let mut unit = 0;
+    while size >= 1000.0 && unit < UNITS.len() - 1 {
+        size /= 1000.0;
+        unit += 1;
+    }
+    if unit == 0 {
+        format!("{bytes} bytes")
+    } else {
+        format!("{size:.1} {}", UNITS[unit])
+    }
 }

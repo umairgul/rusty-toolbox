@@ -26,6 +26,10 @@ croner.workspace = true
 serde-saphyr.workspace = true
 toml.workspace = true
 csv.workspace = true
+fancy-regex.workspace = true
+similar.workspace = true
+sqlformat.workspace = true
+pulldown-cmark.workspace = true
 
 [dev-dependencies]
 rqrr = "0.11"

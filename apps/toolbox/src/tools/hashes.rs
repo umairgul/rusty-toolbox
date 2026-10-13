@@ -1,4 +1,4 @@
-use super::{Category, Tool, ValueRow, error_label, status_label, value_rows};
+use super::{Category, Tool, ValueRow, error_label, human_size, status_label, value_rows};
 use egui::RichText;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -147,21 +147,6 @@ fn file_name(path: &std::path::Path) -> String {
         || path.display().to_string(),
         |name| name.to_string_lossy().into_owned(),
     )
-}
-
-fn human_size(bytes: u64) -> String {
-    const UNITS: [&str; 5] = ["bytes", "KB", "MB", "GB", "TB"];
-    let mut size = bytes as f64;
-    let mut unit = 0;
-    while size >= 1000.0 && unit < UNITS.len() - 1 {
-        size /= 1000.0;
-        unit += 1;
-    }
-    if unit == 0 {
-        format!("{bytes} bytes")
-    } else {
-        format!("{size:.1} {}", UNITS[unit])
-    }
 }
 
 impl Tool for HashesTool {

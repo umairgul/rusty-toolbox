@@ -38,9 +38,16 @@ croner = { version = "4", default-features = false, features = ["jiff"] }
 serde-saphyr = "1"
 toml = "1"
 csv = "1"
+fancy-regex = "0.19"
+similar = { version = "3", features = ["inline"] }
+sqlformat = "0.5"
+pulldown-cmark = { version = "0.13", default-features = false, features = ["html"] }
+egui_commonmark = "0.25"
 
 [workspace.lints.rust]
-unsafe_code = "forbid"
+# Denied rather than forbidden so the two small macOS modules in apps/toolbox (eyedropper.rs
+# and color_space.rs) can opt in with a documented `#[allow(unsafe_code)]`.
+unsafe_code = "deny"
 
 [workspace.lints.clippy]
 dbg_macro = "warn"

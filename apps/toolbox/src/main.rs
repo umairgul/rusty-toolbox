@@ -1,5 +1,7 @@
 //! Toolbox desktop app: a sidebar of tools, with the selected tool's UI on the right.
 
+mod color_space;
+mod eyedropper;
 mod tools;
 
 use tools::{Category, Tool};
@@ -23,7 +25,10 @@ fn main() -> eframe::Result {
     eframe::run_native(
         "Toolbox",
         options,
-        Box::new(|_cc| Ok(Box::new(ToolboxApp::new()))),
+        Box::new(|cc| {
+            color_space::use_srgb(cc);
+            Ok(Box::new(ToolboxApp::new()))
+        }),
     )
 }
 
@@ -118,5 +123,44 @@ mod tests {
                     .expect("screenshot saved");
             }
         }
+    }
+
+    /// egui's built-in fonts lack many symbols, such as check marks and arrows, which then
+    /// draw as empty boxes. Every non-ASCII character in the UI source must be one the fonts can draw.
+    #[test]
+    fn ui_text_uses_only_drawable_characters() {
+        let ctx = egui::Context::default();
+        // One frame loads the fonts. Its texture updates go nowhere in a test, so clear them.
+        ctx.run_ui(Default::default(), |_| {})
+            .textures_delta
+            .clear();
+        // The proportional fonts are the UI's fallback chain; monospace loads lazily, so its
+        // glyphs aren't known up front.
+        let font = egui::FontId::proportional(14.0);
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut missing = Vec::new();
+        let mut files = vec![dir.join("main.rs")];
+        files.extend(
+            std::fs::read_dir(dir.join("tools"))
+                .unwrap()
+                .map(|entry| entry.unwrap().path()),
+        );
+        for file in files {
+            let source = std::fs::read_to_string(&file).unwrap();
+            for c in source.chars().filter(|c| !c.is_ascii()) {
+                let drawable = ctx.fonts_mut(|f| f.has_glyph(&font, c));
+                if !drawable {
+                    missing.push(format!(
+                        "{c:?} in {}",
+                        file.file_name().unwrap().to_string_lossy()
+                    ));
+                }
+            }
+        }
+        missing.dedup();
+        assert!(
+            missing.is_empty(),
+            "characters egui can't draw: {missing:?}"
+        );
     }
 }
