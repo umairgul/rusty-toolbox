@@ -10,7 +10,12 @@ mod fake_data;
 mod formats;
 mod gradients;
 mod hashes;
+mod icon_generator;
 mod ids;
+mod image_base64;
+mod image_converter;
+mod image_metadata;
+mod image_widgets;
 mod json_formatter;
 mod jwt;
 mod lorem;
@@ -40,14 +45,16 @@ pub enum Category {
     Converters,
     Formatters,
     Design,
+    Images,
 }
 
 impl Category {
-    pub const ALL: [Category; 4] = [
+    pub const ALL: [Category; 5] = [
         Category::Generators,
         Category::Converters,
         Category::Formatters,
         Category::Design,
+        Category::Images,
     ];
 
     pub fn label(self) -> &'static str {
@@ -56,6 +63,7 @@ impl Category {
             Category::Converters => "ENCODERS & CONVERTERS",
             Category::Formatters => "FORMATTERS & TESTERS",
             Category::Design => "COLOR & DESIGN",
+            Category::Images => "IMAGES",
         }
     }
 }
@@ -93,6 +101,10 @@ pub fn all() -> Vec<Box<dyn Tool>> {
         Box::new(contrast::ContrastTool::default()),
         Box::new(palettes::PalettesTool::default()),
         Box::new(gradients::GradientsTool::default()),
+        Box::new(image_converter::ImageConverterTool::default()),
+        Box::new(image_metadata::ImageMetadataTool::default()),
+        Box::new(icon_generator::IconGeneratorTool::default()),
+        Box::new(image_base64::ImageBase64Tool::default()),
     ]
 }
 

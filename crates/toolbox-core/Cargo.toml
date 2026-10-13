@@ -30,6 +30,10 @@ fancy-regex.workspace = true
 similar.workspace = true
 sqlformat.workspace = true
 pulldown-cmark.workspace = true
+image.workspace = true
+kamadak-exif.workspace = true
+crc32fast.workspace = true
+resvg.workspace = true
 
 [dev-dependencies]
 rqrr = "0.11"

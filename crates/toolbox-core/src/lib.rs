@@ -11,6 +11,7 @@ pub mod fake;
 pub mod formats;
 pub mod hash;
 pub mod ids;
+pub mod images;
 pub mod json_format;
 pub mod jwt;
 pub mod lorem;

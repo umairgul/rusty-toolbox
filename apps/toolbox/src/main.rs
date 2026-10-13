@@ -12,7 +12,7 @@ const ICON_PNG: &[u8] = include_bytes!("../../../assets/icon/toolbox-512.png");
 fn main() -> eframe::Result {
     let mut viewport = egui::ViewportBuilder::default()
         .with_title("Toolbox")
-        .with_inner_size([900.0, 640.0])
+        .with_inner_size([960.0, 760.0])
         .with_min_inner_size([600.0, 420.0]);
     match eframe::icon_data::from_png_bytes(ICON_PNG) {
         Ok(icon) => viewport = viewport.with_icon(icon),
@@ -61,23 +61,30 @@ impl ToolboxApp {
                 ui.add_space(8.0);
                 ui.heading("Toolbox");
                 ui.separator();
-                for category in Category::ALL {
-                    ui.add_space(4.0);
-                    ui.label(egui::RichText::new(category.label()).small().weak());
-                    for (index, tool) in self
-                        .tools
-                        .iter()
-                        .enumerate()
-                        .filter(|(_, tool)| tool.category() == category)
-                    {
-                        if ui
-                            .selectable_label(self.selected == index, tool.name())
-                            .clicked()
-                        {
-                            self.selected = index;
+                // Scrolls once the list is taller than the window.
+                egui::ScrollArea::vertical()
+                    .id_salt("tool_list_scroll")
+                    .auto_shrink(false)
+                    .show(ui, |ui| {
+                        for category in Category::ALL {
+                            ui.add_space(4.0);
+                            ui.label(egui::RichText::new(category.label()).small().weak());
+                            for (index, tool) in self
+                                .tools
+                                .iter()
+                                .enumerate()
+                                .filter(|(_, tool)| tool.category() == category)
+                            {
+                                if ui
+                                    .selectable_label(self.selected == index, tool.name())
+                                    .clicked()
+                                {
+                                    self.selected = index;
+                                }
+                            }
                         }
-                    }
-                }
+                        ui.add_space(8.0);
+                    });
             });
 
         egui::CentralPanel::default().show(ui, |ui| {

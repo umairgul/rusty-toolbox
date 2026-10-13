@@ -22,7 +22,20 @@ rfd = "0.17"
 rand = "0.10"
 uuid = { version = "1", features = ["v4", "v7"] }
 qrcode = { version = "0.14", default-features = false }
-image = { version = "0.25", default-features = false, features = ["png"] }
+image = { version = "0.25", default-features = false, features = [
+    "png",
+    "jpeg",
+    "webp",
+    "gif",
+    "bmp",
+    "ico",
+    "tiff",
+    "avif",
+    "rayon",
+] }
+kamadak-exif = "0.6"
+crc32fast = "1"
+resvg = "0.48"
 # preserve_order keeps object keys in input order (Data Formats, JWT payloads).
 serde_json = { version = "1", features = ["preserve_order"] }
 serde = { version = "1", features = ["derive"] }
