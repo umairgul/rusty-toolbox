@@ -1,0 +1,21 @@
+[package]
+name = "toolbox"
+description = "Toolbox desktop app: small everyday tools for developers and power users"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+toolbox-core.workspace = true
+eframe.workspace = true
+egui.workspace = true
+rfd.workspace = true
+image.workspace = true
+jiff.workspace = true
+
+[dev-dependencies]
+egui_kittest = { version = "0.36", features = ["wgpu"] }

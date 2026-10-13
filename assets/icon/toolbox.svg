@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- Toolbox app icon. Edit this file, then run `cargo xtask icon` to regenerate the PNGs and .icns. -->
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5C8DFF"/>
+      <stop offset="1" stop-color="#2E40C2"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0" r="0.85">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FF6E4E"/>
+      <stop offset="1" stop-color="#D93B26"/>
+    </linearGradient>
+    <linearGradient id="lid" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FF8C68"/>
+      <stop offset="1" stop-color="#F2563A"/>
+    </linearGradient>
+    <linearGradient id="steel" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#F5F7FB"/>
+      <stop offset="1" stop-color="#B4BED0"/>
+    </linearGradient>
+    <linearGradient id="grip" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FFD95C"/>
+      <stop offset="1" stop-color="#F5B21E"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="16"/>
+      <feOffset dy="16"/>
+      <feComponentTransfer>
+        <feFuncA type="linear" slope="0.35"/>
+      </feComponentTransfer>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <!-- Cuts the open jaw out of the wrench head. -->
+    <mask id="wrench-jaw" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024">
+      <rect width="1024" height="1024" fill="#FFFFFF"/>
+      <rect x="311" y="160" width="38" height="68" rx="8" fill="#000000"/>
+    </mask>
+  </defs>
+
+  <!-- Background, on Apple's macOS icon grid: 824×824 inside 1024×1024. -->
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#background)"/>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#glow)"/>
+
+  <g filter="url(#shadow)">
+    <!-- Wrench, behind the lid. -->
+    <g transform="rotate(-22 330 430)" mask="url(#wrench-jaw)">
+      <rect x="312" y="236" width="36" height="200" rx="18" fill="url(#steel)"/>
+      <circle cx="330" cy="230" r="54" fill="url(#steel)"/>
+    </g>
+
+    <!-- Screwdriver, behind the lid. -->
+    <g transform="rotate(20 700 430)">
+      <rect x="690" y="300" width="20" height="130" fill="url(#steel)"/>
+      <rect x="666" y="186" width="68" height="132" rx="28" fill="url(#grip)"/>
+      <rect x="684" y="208" width="9" height="88" rx="4.5" fill="#D99A0E" opacity="0.55"/>
+      <rect x="707" y="208" width="9" height="88" rx="4.5" fill="#D99A0E" opacity="0.55"/>
+    </g>
+
+    <!-- Carry handle. -->
+    <path d="M404 404V338Q404 298 444 298H580Q620 298 620 338V404"
+          fill="none" stroke="#E3E8F1" stroke-width="42" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!-- Box body and lid. -->
+    <rect x="232" y="468" width="560" height="316" rx="46" fill="url(#body)"/>
+    <rect x="232" y="510" width="560" height="18" fill="#000000" opacity="0.14"/>
+    <rect x="212" y="392" width="600" height="122" rx="38" fill="url(#lid)"/>
+    <rect x="244" y="404" width="536" height="14" rx="7" fill="#FFFFFF" opacity="0.28"/>
+
+    <!-- Latch. -->
+    <rect x="468" y="476" width="88" height="80" rx="18" fill="#FFD34D"/>
+    <rect x="493" y="500" width="38" height="16" rx="8" fill="#B07F0B"/>
+
+    <!-- Rivets on the body. -->
+    <circle cx="300" cy="720" r="12" fill="#FFFFFF" opacity="0.3"/>
+    <circle cx="724" cy="720" r="12" fill="#FFFFFF" opacity="0.3"/>
+  </g>
+</svg>
