@@ -18,10 +18,12 @@ fn main() -> eframe::Result {
         Ok(icon) => viewport = viewport.with_icon(icon),
         Err(error) => eprintln!("couldn't load the app icon: {error}"),
     }
-    let options = eframe::NativeOptions {
+    let mut options = eframe::NativeOptions {
         viewport,
         ..Default::default()
     };
+    #[cfg(windows)]
+    prefer_dx12(&mut options);
     eframe::run_native(
         "Toolbox",
         options,
@@ -30,6 +32,19 @@ fn main() -> eframe::Result {
             Ok(Box::new(ToolboxApp::new()))
         }),
     )
+}
+
+/// wgpu picks Vulkan over DX12 by default, and some Intel Vulkan drivers (seen on UHD 620)
+/// crash with an access violation while the window is created. DX12 is Windows' native API,
+/// so use it, with GL as a fallback. `WGPU_BACKEND` still overrides this.
+#[cfg(windows)]
+fn prefer_dx12(options: &mut eframe::NativeOptions) {
+    use eframe::egui_wgpu::{WgpuSetup, wgpu::Backends};
+    if std::env::var_os("WGPU_BACKEND").is_none()
+        && let WgpuSetup::CreateNew(setup) = &mut options.wgpu_options.wgpu_setup
+    {
+        setup.instance_descriptor.backends = Backends::DX12 | Backends::GL;
+    }
 }
 
 struct ToolboxApp {
