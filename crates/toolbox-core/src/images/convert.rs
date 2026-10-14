@@ -13,6 +13,11 @@ use std::path::{Path, PathBuf};
 
 /// ICO files hold images up to 256×256.
 const ICO_MAX: u32 = 256;
+/// The largest output, in pixels, so a huge resize can't exhaust memory. The same as the
+/// image crate's default decoding limit: 128 megapixels is 512 MB as RGBA.
+const MAX_OUTPUT_PIXELS: u64 = 128 * 1024 * 1024;
+/// The largest output side, which is also the most JPEG and WebP can store.
+const MAX_OUTPUT_SIDE: u32 = 16_383;
 /// AVIF encoder speed, 1 (slowest, smallest) to 10 (fastest).
 const AVIF_SPEED: u8 = 6;
 
@@ -203,6 +208,21 @@ fn flatten(image: &DynamicImage, background: [u8; 3]) -> RgbImage {
 
 /// Re-encodes a loaded image with `options`, returning the new file's bytes.
 pub fn encode(loaded: &Loaded, options: &Options) -> Result<Vec<u8>, Error> {
+    let (width, height) = target_size(
+        loaded.image.width(),
+        loaded.image.height(),
+        options.resize,
+        options.allow_upscale,
+    );
+    if width > MAX_OUTPUT_SIDE
+        || height > MAX_OUTPUT_SIDE
+        || u64::from(width) * u64::from(height) > MAX_OUTPUT_PIXELS
+    {
+        return Err(Error(format!(
+            "{width}×{height} is too large: the output can be at most {MAX_OUTPUT_SIDE} pixels on a side and {} megapixels",
+            MAX_OUTPUT_PIXELS / (1024 * 1024)
+        )));
+    }
     let mut image = resize(&loaded.image, options.resize, options.allow_upscale);
     if options.format == OutputFormat::Ico && (image.width() > ICO_MAX || image.height() > ICO_MAX)
     {
@@ -484,6 +504,39 @@ mod tests {
         assert_eq!(target_size(3, 3, Resize::Scale(1), false), (1, 1));
         let resized = resize(&loaded().image, Resize::Scale(50), false);
         assert_eq!((resized.width(), resized.height()), (20, 15));
+    }
+
+    #[test]
+    fn huge_resizes_are_errors() {
+        let huge = [
+            Resize::Exact {
+                width: u32::MAX,
+                height: u32::MAX,
+            },
+            Resize::Exact {
+                width: 100_000,
+                height: 100_000,
+            },
+            Resize::Fit {
+                width: u32::MAX,
+                height: 0,
+            },
+            Resize::Scale(u32::MAX),
+        ];
+        for resize in huge {
+            let options = Options {
+                resize,
+                allow_upscale: true,
+                ..options(OutputFormat::Png)
+            };
+            assert!(encode(&loaded(), &options).is_err(), "{resize:?}");
+        }
+        // Without upscaling, the same requests keep the original size.
+        let options = Options {
+            resize: Resize::Scale(u32::MAX),
+            ..options(OutputFormat::Png)
+        };
+        assert!(encode(&loaded(), &options).is_ok());
     }
 
     #[test]

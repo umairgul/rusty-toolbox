@@ -82,31 +82,33 @@ pub fn validate(input: &str) -> Result<(), SyntaxError> {
     }
     serde_json::from_str::<serde::de::IgnoredAny>(input)
         .map(|_| ())
-        .map_err(|error| {
-            // serde_json messages end with " at line L column C", which is shown separately.
-            let message = error.to_string();
-            let message = message.split(" at line ").next().unwrap_or(&message);
-            let (mut line, mut column) = (error.line(), error.column());
-            // Column 0 means the error was found on reading a line break: it belongs at the end
-            // of the previous line.
-            if column == 0 && line > 1 {
-                line -= 1;
-                column = input
-                    .lines()
-                    .nth(line - 1)
-                    .map_or(1, |text| text.chars().count());
-            }
-            let message = if is_trailing_comma(input, line, column) {
-                "Trailing comma: JSON doesn't allow a comma before ] or }".to_owned()
-            } else {
-                friendly_message(message)
-            };
-            SyntaxError {
-                line,
-                column,
-                message,
-            }
-        })
+        .map_err(|error| syntax_error(input, &error))
+}
+
+fn syntax_error(input: &str, error: &serde_json::Error) -> SyntaxError {
+    // serde_json messages end with " at line L column C", which is shown separately.
+    let message = error.to_string();
+    let message = message.split(" at line ").next().unwrap_or(&message);
+    let (mut line, mut column) = (error.line(), error.column());
+    // Column 0 means the error was found on reading a line break: it belongs at the end
+    // of the previous line.
+    if column == 0 && line > 1 {
+        line -= 1;
+        column = input
+            .lines()
+            .nth(line - 1)
+            .map_or(1, |text| text.chars().count());
+    }
+    let message = if is_trailing_comma(input, line, column) {
+        "Trailing comma: JSON doesn't allow a comma before ] or }".to_owned()
+    } else {
+        friendly_message(message)
+    };
+    SyntaxError {
+        line,
+        column,
+        message,
+    }
 }
 
 /// Whether the character at `line`/`column` (1-based) is `]` or `}` and the last
@@ -122,9 +124,16 @@ fn is_trailing_comma(input: &str, line: usize, column: usize) -> bool {
     if closing != ']' && closing != '}' {
         return false;
     }
-    let line_start: usize = input.lines().take(line - 1).map(|l| l.len() + 1).sum();
+    // Line breaks may be \r\n, so measure the lines with their breaks.
+    let line_start: usize = input
+        .split_inclusive('\n')
+        .take(line.saturating_sub(1))
+        .map(str::len)
+        .sum();
     let offset = line_start + text.char_indices().nth(column - 1).map_or(0, |(i, _)| i);
-    input[..offset].trim_end().ends_with(',')
+    input
+        .get(..offset)
+        .is_some_and(|before| before.trim_end().ends_with(','))
 }
 
 /// Plain-English versions of serde_json's most common messages.
@@ -164,7 +173,9 @@ pub fn minify(input: &str) -> Result<String, SyntaxError> {
 /// JSON, so integers beyond 64 bits and floats are written back in standard form.
 pub fn format_sorted(input: &str, indent: Indent) -> Result<String, SyntaxError> {
     validate(input)?;
-    let mut value: Value = serde_json::from_str(input).expect("validated above");
+    // Valid JSON can still fail here: numbers like 1e400 are out of range for a Value.
+    let mut value: Value =
+        serde_json::from_str(input).map_err(|error| syntax_error(input, &error))?;
     value.sort_all_objects();
     let mut out = Vec::new();
     let mut serializer = Serializer::with_formatter(
@@ -256,6 +267,24 @@ fn capitalize(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn out_of_range_numbers_are_errors_when_sorting() {
+        assert!(format("[1e400]", Indent::TwoSpaces).is_ok());
+        let error = format_sorted("[1e400]", Indent::TwoSpaces).unwrap_err();
+        assert_eq!((error.line, error.column), (1, 6));
+    }
+
+    #[test]
+    fn trailing_commas_with_windows_line_breaks() {
+        for lines in 1..6 {
+            for text in ["a", "é", "🙂"] {
+                let items = format!("\r\n\"{text}{text}\",").repeat(lines);
+                let error = validate(&format!("[{items}\r\n]")).unwrap_err();
+                assert!(error.message.starts_with("Trailing comma"), "{error}");
+            }
+        }
+    }
 
     const INPUT: &str =
         r#" {"b": [1.50, 12345678901234567890123, {}], "a": "x\"y\\", "e": [] ,"n": null} "#;

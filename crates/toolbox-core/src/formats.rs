@@ -99,9 +99,10 @@ pub fn parse(input: &str, format: Format, options: &Options) -> Result<Value, Er
         Format::Json => {
             serde_json::from_str(input).map_err(|e| error(format!("Invalid JSON: {e}")))
         }
-        Format::Yaml => {
+        // The YAML parser recurses per nesting level, deeper than a small thread stack allows.
+        Format::Yaml => crate::stack::with_large_stack(|| {
             serde_saphyr::from_str(input).map_err(|e| error(format!("Invalid YAML: {e}")))
-        }
+        }),
         Format::Toml => {
             let table: toml::Table = input
                 .parse()
@@ -289,6 +290,24 @@ mod tests {
 
     fn options() -> Options {
         Options::default()
+    }
+
+    #[test]
+    fn deeply_nested_yaml_is_an_error_not_a_crash() {
+        // Swift runs work on threads with 512 KB stacks.
+        let parse_small_stack = |input: String| {
+            std::thread::Builder::new()
+                .stack_size(512 * 1024)
+                .spawn(move || parse(&input, Format::Yaml, &Options::default()).is_ok())
+                .unwrap()
+                .join()
+                .unwrap()
+        };
+        for depth in [300, 500, 5_000] {
+            assert!(!parse_small_stack("{\"a\":".repeat(depth)));
+            assert!(!parse_small_stack("[".repeat(depth) + &"]".repeat(depth)));
+        }
+        assert!(parse_small_stack("[".repeat(10) + &"]".repeat(10)));
     }
 
     #[test]

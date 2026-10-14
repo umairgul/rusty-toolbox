@@ -83,7 +83,30 @@ impl Default for Options {
     }
 }
 
+/// Deeper parentheses or brackets than this are formatted on one line: every nested line is indented
+/// once more, so the output grows with the square of the depth (16,000 nested
+/// `SELECT (` would be a gigabyte).
+const MAX_INDENTED_DEPTH: usize = 100;
+
+/// The deepest nesting of parentheses and brackets (PostgreSQL array subscripts indent like
+/// parentheses) in `sql`, counting every one, even quoted ones.
+fn paren_depth(sql: &str) -> usize {
+    let (mut depth, mut deepest) = (0usize, 0);
+    for byte in sql.bytes() {
+        match byte {
+            b'(' | b'[' => {
+                depth += 1;
+                deepest = deepest.max(depth);
+            }
+            b')' | b']' => depth = depth.saturating_sub(1),
+            _ => {}
+        }
+    }
+    deepest
+}
+
 pub fn format(sql: &str, options: &Options) -> String {
+    let inline = options.compact || paren_depth(sql) > MAX_INDENTED_DEPTH;
     let format_options = FormatOptions {
         indent: match options.indent {
             Indent::TwoSpaces => SqlIndent::Spaces(2),
@@ -100,9 +123,9 @@ pub fn format(sql: &str, options: &Options) -> String {
             Dialect::PostgreSql => SqlDialect::PostgreSql,
             Dialect::SqlServer => SqlDialect::SQLServer,
         },
-        inline: options.compact,
+        inline,
         // The number of line breaks between queries: 2 leaves one blank line.
-        lines_between_queries: if options.compact { 1 } else { 2 },
+        lines_between_queries: if inline { 1 } else { 2 },
         ..FormatOptions::default()
     };
     sqlformat::format(sql.trim(), &QueryParams::None, &format_options)
@@ -171,6 +194,21 @@ mod tests {
             },
         );
         assert_eq!(compact.lines().count(), 1, "{compact}");
+    }
+
+    #[test]
+    fn deep_nesting_is_formatted_on_one_line() {
+        let deep = "SELECT (".repeat(5_000);
+        let formatted = format(&deep, &Options::default());
+        assert_eq!(formatted.lines().count(), 1);
+        assert!(formatted.len() < deep.len() * 2);
+        let postgres = Options {
+            dialect: Dialect::PostgreSql,
+            ..Options::default()
+        };
+        assert!(format(&"[".repeat(5_000), &postgres).len() < 20_000);
+        let shallow = format(&"SELECT (".repeat(3), &Options::default());
+        assert!(shallow.lines().count() > 1, "{shallow}");
     }
 
     #[test]

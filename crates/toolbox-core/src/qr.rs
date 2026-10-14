@@ -7,6 +7,10 @@ use std::fmt;
 /// Light modules around the code, which scanners need. Four is the standard minimum.
 pub const QUIET_ZONE: usize = 4;
 
+/// The largest side, in pixels, that [`QrMatrix::to_pixels`] renders: bigger scales are
+/// reduced to fit, so a huge scale can't overflow or exhaust memory.
+pub const MAX_PIXEL_SIZE: usize = 8192;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ErrorCorrection {
     Low,
@@ -146,14 +150,22 @@ impl QrMatrix {
         self.dark[y * self.width + x]
     }
 
+    /// The scale actually used for `scale`: at least 1, and small enough to keep the side
+    /// within [`MAX_PIXEL_SIZE`].
+    fn clamp_scale(&self, scale: usize) -> usize {
+        let modules = self.width + 2 * QUIET_ZONE;
+        scale.clamp(1, (MAX_PIXEL_SIZE / modules).max(1))
+    }
+
     /// Side length in pixels of [`Self::to_pixels`] output.
     pub fn pixel_size(&self, scale: usize) -> usize {
-        (self.width + 2 * QUIET_ZONE) * scale
+        (self.width + 2 * QUIET_ZONE) * self.clamp_scale(scale)
     }
 
     /// Greyscale pixels (0 = dark, 255 = light), `scale` pixels per module, row by row,
     /// including the quiet zone.
     pub fn to_pixels(&self, scale: usize) -> Vec<u8> {
+        let scale = self.clamp_scale(scale);
         let size = self.pixel_size(scale);
         let mut pixels = vec![255u8; size * size];
         for y in 0..self.width {
@@ -204,6 +216,15 @@ impl QrMatrix {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn huge_scales_are_capped() {
+        let matrix = QrMatrix::encode("hi", ErrorCorrection::Low).unwrap();
+        let size = matrix.pixel_size(usize::MAX);
+        assert!(size <= MAX_PIXEL_SIZE);
+        assert_eq!(matrix.to_pixels(usize::MAX).len(), size * size);
+        assert_eq!(matrix.pixel_size(0), matrix.pixel_size(1));
+    }
 
     /// Decodes rendered pixels with an independent QR reader.
     fn scan(matrix: &QrMatrix) -> String {

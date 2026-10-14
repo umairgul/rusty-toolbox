@@ -23,5 +23,6 @@ pub mod password;
 pub mod qr;
 pub mod regex_test;
 pub mod sql;
+mod stack;
 pub mod strength;
 pub mod timestamp;

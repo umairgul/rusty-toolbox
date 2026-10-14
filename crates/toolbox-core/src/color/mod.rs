@@ -10,7 +10,7 @@ mod names;
 mod palette;
 
 pub use contrast::{Level, contrast_ratio, suggest_for_contrast};
-pub use gradient::{Space, css_gradient, css_gradient_fallback, mix, sample, steps};
+pub use gradient::{MAX_STEPS, Space, css_gradient, css_gradient_fallback, mix, sample, steps};
 pub use names::{NAMED_COLORS, named, nearest_name};
 pub use palette::{
     Harmony, SHADE_STEPS, css_variables, harmony, json_palette, nearest_shade, shades,

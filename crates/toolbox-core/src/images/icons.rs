@@ -71,6 +71,9 @@ pub struct GeneratedFile {
     pub bytes: Vec<u8>,
 }
 
+/// The largest side [`square`] works at: twice the largest icon.
+const MAX_SQUARE: u32 = 2048;
+
 const WINDOWS_SIZES: [u32; 7] = [16, 24, 32, 48, 64, 128, 256];
 const FAVICON_ICO_SIZES: [u32; 3] = [16, 32, 48];
 const PNG_SIZES: [u32; 8] = [16, 32, 48, 64, 128, 256, 512, 1024];
@@ -98,6 +101,15 @@ pub const FAVICON_HTML: &str = r#"<link rel="icon" href="/favicon.ico" sizes="48
 
 /// The image made square, as RGBA.
 pub fn square(image: &DynamicImage, fit: Fit) -> RgbaImage {
+    // Padding a long, thin image would make a huge canvas (1×60000 pixels pads to 60000²), so
+    // shrink big images first. Icons are at most 1024 pixels, so this loses nothing.
+    let shrunk;
+    let image = if image.width().max(image.height()) > MAX_SQUARE {
+        shrunk = image.resize(MAX_SQUARE, MAX_SQUARE, FilterType::Lanczos3);
+        &shrunk
+    } else {
+        image
+    };
     let (width, height) = (image.width(), image.height());
     match fit {
         Fit::Pad => {
@@ -231,6 +243,16 @@ mod tests {
 
     fn source() -> DynamicImage {
         DynamicImage::ImageRgba8(test_images::sample())
+    }
+
+    #[test]
+    fn thin_images_are_shrunk_before_padding() {
+        let thin = DynamicImage::new_rgba8(1, 10_000);
+        assert_eq!(
+            square(&thin, Fit::Pad).dimensions(),
+            (MAX_SQUARE, MAX_SQUARE)
+        );
+        assert_eq!(square(&thin, Fit::Crop).dimensions(), (1, 1));
     }
 
     #[test]

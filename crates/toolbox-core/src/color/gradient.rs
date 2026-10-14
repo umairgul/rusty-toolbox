@@ -114,8 +114,12 @@ pub fn sample(stops: &[Color], t: f64, space: Space) -> Color {
     }
 }
 
-/// `count` evenly spaced colors, from the first stop to the last.
+/// The most colors [`steps`] returns, so a huge count can't exhaust memory.
+pub const MAX_STEPS: usize = 1000;
+
+/// `count` evenly spaced colors, from the first stop to the last. At most [`MAX_STEPS`].
 pub fn steps(stops: &[Color], count: usize, space: Space) -> Vec<Color> {
+    let count = count.min(MAX_STEPS);
     match count {
         0 => Vec::new(),
         1 => vec![sample(stops, 0.0, space)],
@@ -165,6 +169,19 @@ pub fn css_gradient_fallback(stops: &[Color], angle: f64, space: Space, samples:
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn huge_step_counts_are_capped() {
+        assert_eq!(
+            steps(&[RED, BLUE], usize::MAX, Space::Oklab).len(),
+            MAX_STEPS
+        );
+        assert!(
+            steps(&[], 3, Space::Srgb)
+                .iter()
+                .all(|c| *c == Color::BLACK)
+        );
+    }
 
     const RED: Color = Color {
         r: 1.0,

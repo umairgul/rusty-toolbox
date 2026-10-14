@@ -123,7 +123,38 @@ pub fn decode(bytes: &[u8]) -> Result<Loaded, Error> {
     })
 }
 
+/// usvg rejects SVGs nested deeper than this, but only after the XML parser has recursed
+/// through all of it.
+const SVG_MAX_DEPTH: usize = 1024;
+
 fn render_svg(bytes: &[u8]) -> Result<Loaded, Error> {
+    if xml_depth(bytes) > SVG_MAX_DEPTH {
+        return Err(Error("Invalid SVG: elements are nested too deeply".into()));
+    }
+    // usvg and resvg recurse per nesting level, deeper than a small thread stack allows.
+    crate::stack::with_large_stack(|| render_svg_on_this_thread(bytes))
+}
+
+/// The deepest element nesting in an XML document, roughly: tags inside comments and quoted
+/// attribute values count too, which can only overestimate.
+fn xml_depth(bytes: &[u8]) -> usize {
+    let (mut depth, mut deepest) = (0usize, 0);
+    for (i, &byte) in bytes.iter().enumerate() {
+        match (byte, bytes.get(i + 1)) {
+            (b'<', Some(b'/')) => depth = depth.saturating_sub(1),
+            (b'<', Some(b'?' | b'!')) => {}
+            (b'<', _) => {
+                depth += 1;
+                deepest = deepest.max(depth);
+            }
+            (b'/', Some(b'>')) => depth = depth.saturating_sub(1),
+            _ => {}
+        }
+    }
+    deepest
+}
+
+fn render_svg_on_this_thread(bytes: &[u8]) -> Result<Loaded, Error> {
     use resvg::{tiny_skia, usvg};
     let tree = usvg::Tree::from_data(bytes, &usvg::Options::default())
         .map_err(|e| Error(format!("Invalid SVG: {e}")))?;
@@ -296,6 +327,29 @@ pub(crate) mod test_images {
 mod tests {
     use super::*;
     use image::ImageFormat;
+
+    #[test]
+    fn deeply_nested_svg_is_an_error_not_a_crash() {
+        let svg = |depth: usize, element: &str| {
+            format!(
+                "<svg xmlns='http://www.w3.org/2000/svg' width='8' height='8'>{}<rect width='4' height='4'/>{}</svg>",
+                format!("<{element}>").repeat(depth),
+                format!("</{element}>").repeat(depth)
+            )
+        };
+        // Swift runs work on threads with 512 KB stacks.
+        let decode_small_stack = |svg: String| {
+            std::thread::Builder::new()
+                .stack_size(512 * 1024)
+                .spawn(move || decode(svg.as_bytes()).map(|loaded| loaded.image.width()))
+                .unwrap()
+                .join()
+                .unwrap()
+        };
+        assert!(decode_small_stack(svg(100_000, "a")).is_err());
+        assert!(decode_small_stack(svg(1_000, "svg")).is_ok());
+        assert!(decode_small_stack(svg(1_000, "g")).is_ok());
+    }
 
     #[test]
     fn detects_mime_types() {

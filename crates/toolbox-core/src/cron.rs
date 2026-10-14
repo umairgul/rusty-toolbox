@@ -14,6 +14,9 @@ pub const EXAMPLES: &[(&str, &str)] = &[
     ("0 0 1 1 *", "Yearly on January 1st"),
 ];
 
+/// The most upcoming runs [`explain`] lists, so a huge count can't take forever.
+pub const MAX_RUNS: usize = 100;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Explanation {
     pub description: String,
@@ -30,7 +33,10 @@ pub fn explain(pattern: &str, now: &Zoned, count: usize) -> Result<Explanation, 
     }
     let cron =
         Cron::from_str(pattern).map_err(|error| format!("Invalid cron expression: {error}"))?;
-    let next_runs = cron.iter_after(now.clone()).take(count).collect();
+    let next_runs = cron
+        .iter_after(now.clone())
+        .take(count.min(MAX_RUNS))
+        .collect();
     Ok(Explanation {
         description: cron.describe(),
         next_runs,
@@ -44,6 +50,19 @@ mod tests {
 
     fn now() -> Zoned {
         "2024-05-15T10:07:00[UTC]".parse().unwrap()
+    }
+
+    #[test]
+    fn run_counts_are_capped() {
+        let explanation = explain("* * * * * *", &now(), usize::MAX).unwrap();
+        assert_eq!(explanation.next_runs.len(), MAX_RUNS);
+    }
+
+    #[test]
+    fn impossible_dates_have_no_runs() {
+        for pattern in ["0 0 30 2 *", "0 0 31 4,6,9,11 *"] {
+            assert!(explain(pattern, &now(), 5).unwrap().next_runs.is_empty());
+        }
     }
 
     #[test]
