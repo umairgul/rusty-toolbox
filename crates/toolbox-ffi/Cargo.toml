@@ -1,0 +1,20 @@
+[package]
+name = "toolbox-ffi"
+description = "UniFFI bindings that expose toolbox-core to the SwiftUI app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+# staticlib is linked into the Swift app; lib lets uniffi-bindgen read the metadata.
+crate-type = ["staticlib", "lib"]
+name = "toolbox_ffi"
+
+[lints]
+workspace = true
+
+[dependencies]
+toolbox-core.workspace = true
+jiff.workspace = true
+uniffi.workspace = true

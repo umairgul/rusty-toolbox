@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
-# Builds a macOS release of Toolbox: dist/Toolbox.app and dist/Toolbox-<version>.dmg.
+# Builds the SwiftUI app: dist/Toolbox.app and dist/Toolbox-<version>.dmg.
 #
-# Usage: scripts/build-macos.sh [--native] [--no-dmg]
+# The Rust core (crates/toolbox-ffi) is built as a static library into macos/Rust/lib, its
+# Swift bindings are generated into macos/Sources, and then the Swift package is built.
+#
+# Usage: scripts/build-macos.sh [--native] [--no-dmg] [--dev]
 #   --native   Build only for this Mac's CPU. By default the app is universal (Apple silicon + Intel).
 #   --no-dmg   Skip creating the disk image.
+#   --dev      Quick local build: implies --native and --no-dmg, builds Swift in debug, then
+#              opens the app.
 #
 # Optional environment variables:
 #   BUNDLE_ID       Reverse-DNS app identifier. Set it to a domain you own before distributing.
@@ -14,16 +19,18 @@
 set -euo pipefail
 
 APP_NAME="Toolbox"
-BIN_NAME="toolbox"
+BIN_NAME="Toolbox"
 BUNDLE_ID="${BUNDLE_ID:-com.example.toolbox}"
-MIN_MACOS="11.0"
+MIN_MACOS="14.0"
 
 universal=true
 make_dmg=true
+dev=false
 for arg in "$@"; do
     case "$arg" in
         --native) universal=false ;;
         --no-dmg) make_dmg=false ;;
+        --dev) dev=true universal=false make_dmg=false ;;
         -h | --help)
             awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"
             exit 0
@@ -73,22 +80,46 @@ for target in "${targets[@]}"; do
     fi
 done
 
-binaries=()
+RUST_LIB="macos/Rust/lib"
+libs=()
 for target in "${targets[@]}"; do
-    step "Building $APP_NAME $VERSION for $target"
-    MACOSX_DEPLOYMENT_TARGET="$MIN_MACOS" cargo build --release --locked -p "$BIN_NAME" --target "$target"
-    binaries+=("target/$target/release/$BIN_NAME")
+    step "Building the Rust core for $target"
+    MACOSX_DEPLOYMENT_TARGET="$MIN_MACOS" cargo build --release --locked -p toolbox-ffi --target "$target"
+    libs+=("target/$target/release/libtoolbox_ffi.a")
 done
+mkdir -p "$RUST_LIB"
+lipo -create -output "$RUST_LIB/libtoolbox_ffi.a" "${libs[@]}"
+
+step "Generating Swift bindings"
+generated="target/uniffi-swift"
+rm -rf "$generated"
+cargo run --release --locked -q -p uniffi-bindgen -- generate --library "${libs[0]}" \
+    --language swift --out-dir "$generated"
+# Replace the checked-out copies only when they changed, so Swift doesn't rebuild needlessly.
+install_if_changed() {
+    mkdir -p "$(dirname "$2")"
+    cmp -s "$1" "$2" || cp "$1" "$2"
+}
+install_if_changed "$generated/toolbox_ffi.swift" macos/Sources/ToolboxBindings/toolbox_ffi.swift
+install_if_changed "$generated/toolbox_ffiFFI.h" macos/Sources/toolbox_ffiFFI/include/toolbox_ffiFFI.h
+install_if_changed "$generated/toolbox_ffiFFI.modulemap" macos/Sources/toolbox_ffiFFI/include/module.modulemap
+
+if $dev; then configuration=debug; else configuration=release; fi
+archs=()
+for target in "${targets[@]}"; do
+    arch="${target%%-*}"
+    archs+=(--arch "${arch/aarch64/arm64}")
+done
+step "Building $APP_NAME $VERSION for ${targets[*]} ($configuration)"
+swift_build=(swift build --package-path macos -c "$configuration" "${archs[@]}")
+"${swift_build[@]}"
+binary="$("${swift_build[@]}" --show-bin-path)/$BIN_NAME"
 
 # ---- Bundle ------------------------------------------------------------------------------
 step "Assembling $APP"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-if (( ${#binaries[@]} > 1 )); then
-    lipo -create -output "$APP/Contents/MacOS/$BIN_NAME" "${binaries[@]}"
-else
-    cp "${binaries[0]}" "$APP/Contents/MacOS/$BIN_NAME"
-fi
+cp "$binary" "$APP/Contents/MacOS/$BIN_NAME"
 cp "$ICON" "$APP/Contents/Resources/$APP_NAME.icns"
 cat > "$APP/Contents/Info.plist" << EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -97,6 +128,19 @@ cat > "$APP/Contents/Info.plist" << EOF
 <dict>
     <key>CFBundleDevelopmentRegion</key>     <string>en</string>
     <key>CFBundleDisplayName</key>           <string>$APP_NAME</string>
+    <key>CFBundleDocumentTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeName</key>      <string>Image</string>
+            <key>CFBundleTypeRole</key>      <string>Viewer</string>
+            <key>LSHandlerRank</key>         <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>public.image</string>
+                <string>public.svg-image</string>
+            </array>
+        </dict>
+    </array>
     <key>CFBundleExecutable</key>            <string>$BIN_NAME</string>
     <key>CFBundleIconFile</key>              <string>$APP_NAME</string>
     <key>CFBundleIdentifier</key>            <string>$BUNDLE_ID</string>
@@ -152,3 +196,11 @@ if $make_dmg; then
 fi
 echo "  Bundle ID:     $BUNDLE_ID"
 echo "  Minimum macOS: $MIN_MACOS"
+
+if $dev; then
+    # Quit a running copy first so `open` launches the new build.
+    running="$PWD/$APP/Contents/MacOS/$BIN_NAME"
+    osascript -e "quit app \"$PWD/$APP\"" 2> /dev/null || true
+    while pgrep -qf "$running"; do sleep 0.2; done
+    open "$APP"
+fi

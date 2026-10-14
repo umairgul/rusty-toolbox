@@ -1,0 +1,10 @@
+[package]
+name = "uniffi-bindgen"
+description = "Generates the Swift bindings for toolbox-ffi. Run via scripts/build-macos.sh."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+uniffi = { workspace = true, features = ["cli"] }

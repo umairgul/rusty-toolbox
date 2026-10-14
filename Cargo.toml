@@ -1,8 +1,9 @@
 [workspace]
 resolver = "3"
-members = ["crates/*", "apps/*", "xtask"]
-# Plain `cargo build`/`cargo test` skip xtask, which is only needed for `cargo xtask`.
-default-members = ["crates/*", "apps/*"]
+members = ["crates/*", "xtask", "uniffi-bindgen"]
+# Plain `cargo build`/`cargo test` skip xtask and uniffi-bindgen, which are only needed for
+# `cargo xtask` and generating the Swift bindings.
+default-members = ["crates/*"]
 
 [workspace.package]
 version = "0.1.0"
@@ -13,10 +14,8 @@ license = "MIT OR Apache-2.0"
 # internal
 toolbox-core = { path = "crates/toolbox-core" }
 
-# ui
-eframe = "0.36"
-egui = "0.36"
-rfd = "0.17"
+# ffi
+uniffi = "0.32"
 
 # tools
 rand = "0.10"
@@ -55,12 +54,11 @@ fancy-regex = "0.19"
 similar = { version = "3", features = ["inline"] }
 sqlformat = "0.5"
 pulldown-cmark = { version = "0.13", default-features = false, features = ["html"] }
-egui_commonmark = "0.25"
 
 [workspace.lints.rust]
-# Denied rather than forbidden so the two small macOS modules in apps/toolbox (eyedropper.rs
-# and color_space.rs) can opt in with a documented `#[allow(unsafe_code)]`.
-unsafe_code = "deny"
+# No crate needs `unsafe`. UniFFI's generated scaffolding comes from its own macros, which
+# this lint doesn't apply to.
+unsafe_code = "forbid"
 
 [workspace.lints.clippy]
 dbg_macro = "warn"

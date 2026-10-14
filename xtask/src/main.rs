@@ -1,7 +1,7 @@
 //! Project automation. Run with `cargo xtask <command>`:
 //!
-//! - `icon`: renders `assets/icon/toolbox.svg` to `assets/icon/toolbox-512.png` (the window
-//!   icon) and, on macOS, `assets/icon/Toolbox.icns` (the app bundle icon).
+//! - `icon`: renders `assets/icon/toolbox.svg` to `assets/icon/toolbox-512.png` (used by the
+//!   README) and, on macOS, `assets/icon/Toolbox.icns` (the app bundle icon).
 
 use resvg::{tiny_skia, usvg};
 use std::error::Error;
@@ -55,9 +55,9 @@ fn icon() -> Result {
     let svg = fs::read(icon_dir.join("toolbox.svg"))?;
     let tree = usvg::Tree::from_data(&svg, &usvg::Options::default())?;
 
-    let window_icon = icon_dir.join("toolbox-512.png");
-    render(&tree, 512)?.save_png(&window_icon)?;
-    println!("wrote {}", window_icon.display());
+    let png = icon_dir.join("toolbox-512.png");
+    render(&tree, 512)?.save_png(&png)?;
+    println!("wrote {}", png.display());
 
     if cfg!(target_os = "macos") {
         let iconset = root.join("target/xtask/Toolbox.iconset");

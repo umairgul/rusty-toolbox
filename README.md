@@ -6,12 +6,12 @@
 
 <p align="center">
   <strong>27 everyday tools for developers and designers in one fast, native desktop app.</strong><br>
-  Built in Rust with <a href="https://github.com/emilk/egui">egui</a>. Works offline, and your data never leaves your computer.
+  A SwiftUI app on a Rust core. Works offline, and your data never leaves your computer.
 </p>
 
 <p align="center">
   <img alt="Rust 2024 edition" src="https://img.shields.io/badge/rust-2024_edition-orange?logo=rust">
-  <img alt="Platform: macOS" src="https://img.shields.io/badge/platform-macOS_11%2B-lightgrey?logo=apple">
+  <img alt="Platform: macOS" src="https://img.shields.io/badge/platform-macOS_14%2B-lightgrey?logo=apple">
   <img alt="License: MIT OR Apache-2.0" src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue">
 </p>
 
@@ -41,7 +41,7 @@
 Developers often paste tokens, passwords and customer data into random websites just to decode a JWT or format some JSON. Toolbox puts those utilities in one native app instead:
 
 - **Private.** Everything runs on your machine, with no network calls, telemetry or accounts.
-- **Fast.** It's a native Rust binary that starts quickly and stays responsive with large inputs.
+- **Native.** A SwiftUI app with the system's controls, text editing, dark mode and eyedropper, on a fast Rust core that stays responsive with large inputs.
 - **Exact.** Formatters keep your numbers, escapes and key order as written, and lossless operations stay lossless.
 - **One place.** Generators, converters, formatters, color tools and image tools share one sidebar.
 
@@ -106,7 +106,7 @@ Developers often paste tokens, passwords and customer data into random websites 
 1. Download `Toolbox-<version>.dmg` from the [Releases](https://github.com/umairgul/rusty-toolbox/releases) page.
 2. Open the disk image and drag **Toolbox** into **Applications**.
 
-Toolbox needs macOS 11 (Big Sur) or later and runs natively on both Apple silicon and Intel.
+Toolbox needs macOS 14 (Sonoma) or later and runs natively on both Apple silicon and Intel.
 
 > **Note:** If a build isn't signed with a Developer ID, macOS Gatekeeper warns on first launch. Right-click the app, choose **Open**, then confirm.
 
@@ -118,9 +118,9 @@ See [Building from source](#building-from-source) below.
 
 ### Prerequisites
 
+- **macOS 14 or later.**
 - **Rust**, a recent stable toolchain that supports the 2024 edition (1.85 or newer), installed with [rustup](https://rustup.rs).
-- **macOS:** Xcode Command Line Tools (`xcode-select --install`).
-- **Linux:** the system libraries egui/eframe needs for windowing and OpenGL, such as the X11/Wayland and `libxkbcommon` development packages.
+- **Swift 6.2 or newer.** The Xcode Command Line Tools are enough (`xcode-select --install`). Full Xcode isn't required, but it gives you SwiftUI previews, Instruments and the view debugger.
 
 ### Build and run
 
@@ -128,50 +128,54 @@ See [Building from source](#building-from-source) below.
 git clone https://github.com/umairgul/rusty-toolbox.git
 cd rusty-toolbox
 
-# Run a development build
-cargo run -p toolbox
-
-# Run an optimized build
-cargo run -p toolbox --release
+# Build dist/Toolbox.app for this Mac and open it
+scripts/build-macos.sh --dev
 ```
 
-Dependencies are compiled with optimizations even in debug builds (see `[profile.dev.package."*"]` in `Cargo.toml`), so development builds stay responsive while your own code compiles quickly.
+The script builds the Rust core as a static library, generates its Swift bindings, builds the Swift package and assembles the app bundle. After the first run, `swift build --package-path macos` works on its own for Swift-only changes. Run the script again whenever you change Rust code.
 
 ## Project structure
 
-Toolbox is a Cargo workspace with three members:
-
 ```
 rusty-toolbox/
-├── apps/
-│   └── toolbox/                 # Desktop app (egui/eframe): the window, sidebar and tool UIs
-│       └── src/
-│           ├── main.rs          # App entry point, layout and UI tests
-│           ├── eyedropper.rs    # Screen color sampling (macOS, NSColorSampler)
-│           ├── color_space.rs   # Tags the window as sRGB on macOS
-│           └── tools/           # One module per tool, plus shared widgets (mod.rs)
 ├── crates/
-│   └── toolbox-core/            # All tool logic, with no GUI dependencies
-│       ├── data/                # Bundled data (EFF passphrase wordlist)
-│       └── src/                 # One module per tool: hash, jwt, cron, color/, images/, ...
+│   ├── toolbox-core/            # All tool logic, with no UI dependencies
+│   │   ├── data/                # Bundled data (EFF passphrase wordlist)
+│   │   └── src/                 # One module per tool: hash, jwt, cron, color/, images/, ...
+│   └── toolbox-ffi/             # UniFFI bindings: exposes toolbox-core to Swift
+│       └── src/                 # One module per tool, plus shared color, images, time_zones
+├── macos/                       # The SwiftUI app (a Swift package)
+│   ├── Package.swift
+│   └── Sources/
+│       ├── Toolbox/
+│       │   ├── App/             # Entry point, sidebar, tool registry (Tool.swift), ToolStore
+│       │   ├── Components/      # Shared views: CodeEditor, CopyButton, ValueRow, ColorField, ...
+│       │   └── Tools/           # One file per tool: its @Observable model and its view
+│       ├── ToolboxBindings/     # Generated Swift bindings (not committed)
+│       └── toolbox_ffiFFI/      # C target for the generated header (header not committed)
+├── uniffi-bindgen/              # The bindings generator, run by the build script
 ├── xtask/                       # Project automation (`cargo xtask <command>`)
 ├── scripts/
 │   └── build-macos.sh           # Builds Toolbox.app and a signed, notarized .dmg
 ├── assets/icon/                 # App icon source (SVG) and rendered PNG/ICNS
-├── .cargo/config.toml           # Defines the `cargo xtask` alias
 └── Cargo.toml                   # Workspace manifest: shared dependencies, lints and profiles
 ```
 
 ## Architecture
 
-The code is split into two layers with a strict boundary:
+The code is split into three layers:
 
 ```
 ┌──────────────────────────────────────────────┐
-│  apps/toolbox (egui)                         │
-│  Sidebar · tool UIs · file dialogs · copy    │
+│  macos/ (SwiftUI)                            │
+│  Sidebar · tool views · files · clipboard    │
 └──────────────────────┬───────────────────────┘
-                       │ calls plain Rust functions
+                       │ generated Swift bindings
+┌──────────────────────▼───────────────────────┐
+│  crates/toolbox-ffi (UniFFI)                 │
+│  FFI-friendly records, enums and errors      │
+└──────────────────────┬───────────────────────┘
+                       │ plain Rust calls
 ┌──────────────────────▼───────────────────────┐
 │  crates/toolbox-core                         │
 │  Hashing · encoding · parsing · color math · │
@@ -179,19 +183,11 @@ The code is split into two layers with a strict boundary:
 └──────────────────────────────────────────────┘
 ```
 
-- **`toolbox-core`** holds every algorithm and data transformation. It has no UI dependencies, so it is fully unit-tested and could back another frontend such as a CLI, a web build or a different GUI toolkit.
-- **`toolbox`** (the app) is a thin presentation layer. Each tool implements the `Tool` trait, owns its UI state and calls into `toolbox-core` to do the work.
+- **`toolbox-core`** holds every algorithm and data transformation. It has no UI or FFI dependencies, and it's fully unit-tested.
+- **`toolbox-ffi`** wraps the core for Swift with [UniFFI](https://mozilla.github.io/uniffi-rs/) proc macros. It converts core types to records and enums that cross the boundary (strings, numbers, `Vec<u8>` as `Data`), and reports failures as `ToolError`. It's built as a static library that's linked into the app, so there's no dynamic library to ship.
+- **The SwiftUI app** is a presentation layer. Each tool is one file in `macos/Sources/Toolbox/Tools/` with an `@Observable` model, which holds the tool's state, and a view. `ToolStore` keeps every model alive for the whole session, so switching tools doesn't lose what you typed.
 
-```rust
-pub trait Tool {
-    fn name(&self) -> &'static str;
-    fn description(&self) -> &'static str;
-    fn category(&self) -> Category;
-    fn ui(&mut self, ui: &mut egui::Ui);
-}
-```
-
-`tools::all()` returns every tool. The sidebar groups them by `Category` (Generators, Encoders & Converters, Formatters & Testers, Color & Design, Images) in the order they appear in that list.
+Slow work, such as converting images, hashing files or formatting large inputs, runs off the main thread through `offMainThread` or `.task(id:)`, and stale results are discarded.
 
 ## Development guide
 
@@ -199,105 +195,106 @@ pub trait Tool {
 
 | Task | Command |
 | --- | --- |
-| Run the app | `cargo run -p toolbox` |
-| Run all tests | `cargo test --workspace` |
+| Build and open the app | `scripts/build-macos.sh --dev` |
+| Rebuild only Swift changes | `swift build --package-path macos` |
+| Run all Rust tests | `cargo test --workspace` |
 | Test only the core logic | `cargo test -p toolbox-core` |
 | Lint | `cargo clippy --workspace --all-targets` |
-| Format | `cargo fmt --all` |
+| Format Rust | `cargo fmt --all` |
 | Regenerate the app icon | `cargo xtask icon` |
 | Build a macOS release | `scripts/build-macos.sh` |
 
-> `xtask` isn't a default workspace member, so plain `cargo build` and `cargo test` skip it. Use `--workspace` to include it.
+> `xtask` and `uniffi-bindgen` aren't default workspace members, so plain `cargo build` and `cargo test` skip them. Use `--workspace` to include them.
 
 ### Adding a new tool
 
-1. **Write the logic in `toolbox-core`.** Add `crates/toolbox-core/src/my_tool.rs`, export it from `lib.rs` with `pub mod my_tool;`, and cover it with unit tests in the same file:
-
-   ```rust
-   pub fn transform(input: &str) -> Result<String, Error> { /* ... */ }
-
-   #[cfg(test)]
-   mod tests {
-       use super::*;
-
-       #[test]
-       fn transforms_simple_input() {
-           assert_eq!(transform("abc").unwrap(), "...");
-       }
-   }
-   ```
+1. **Write the logic in `toolbox-core`.** Add `crates/toolbox-core/src/my_tool.rs`, export it from `lib.rs` with `pub mod my_tool;`, and cover it with unit tests in the same file.
 
    If the tool needs a new crate, add it under `[workspace.dependencies]` in the root `Cargo.toml`, then reference it with `name.workspace = true` in the member's `Cargo.toml`.
 
-2. **Build the UI in the app.** Add `apps/toolbox/src/tools/my_tool.rs`:
+2. **Expose it to Swift in `toolbox-ffi`.** Add `crates/toolbox-ffi/src/my_tool.rs` and declare it in `lib.rs`:
 
    ```rust
-   use super::{Category, Tool};
+   use crate::ToolError;
 
-   #[derive(Default)]
-   pub struct MyTool {
-       input: String,
+   #[uniffi::export]
+   pub fn my_tool_transform(input: &str) -> Result<String, ToolError> {
+       toolbox_core::my_tool::transform(input).map_err(ToolError::new)
+   }
+   ```
+
+   UniFFI has one namespace for everything it exports, so prefix every function and type with the tool's name (`my_tool_transform`, `MyToolOptions`), never generic names like `Options` or `Mode`.
+
+3. **Build the view.** Add `macos/Sources/Toolbox/Tools/MyTool.swift`:
+
+   ```swift
+   import SwiftUI
+   import ToolboxBindings
+
+   @Observable
+   final class MyToolModel {
+       var input = ""
    }
 
-   impl Tool for MyTool {
-       fn name(&self) -> &'static str { "My Tool" }
-       fn description(&self) -> &'static str { "One sentence on what it does." }
-       fn category(&self) -> Category { Category::Converters }
+   struct MyToolView: View {
+       @Bindable var model: MyToolModel
 
-       fn ui(&mut self, ui: &mut egui::Ui) {
-           ui.text_edit_multiline(&mut self.input);
-           match toolbox_core::my_tool::transform(&self.input) {
-               Ok(output) => super::output_box(ui, "my_tool_output", &output, 240.0),
-               Err(error) => super::error_label(ui, error),
+       var body: some View {
+           Form {
+               Section {
+                   TextField("Input", text: $model.input)
+               }
+               Section("Result") {
+                   switch Result(catching: { try myToolTransform(input: model.input) }) {
+                   case .success(let output): ValueRow("Output", value: output)
+                   case .failure(let error): StatusLabel(ok: false, message: error.message)
+                   }
+               }
            }
+           .formStyle(.grouped)
        }
    }
    ```
 
-3. **Register it.** Add `mod my_tool;` to `apps/toolbox/src/tools/mod.rs` and a `Box::new(my_tool::MyTool::default())` entry to `all()`, positioned where it should appear within its category.
+4. **Register it.** Add a case to `Tool` in `App/Tool.swift` with its name, summary, category and SF Symbol. Add a model to `ToolStore` and to `ToolStore.model(for:)`, and add the view to `ToolDetail` in `App/ContentView.swift`.
 
-4. **Reuse the shared widgets** in `tools/mod.rs` rather than writing your own:
+5. **Reuse the shared components** in `Components/` rather than writing your own:
 
-   | Helper | Use it for |
+   | Component | Use it for |
    | --- | --- |
-   | `copy_button` | A copy button that briefly reads "Copied!" |
-   | `output_box` | Read-only, selectable monospace output |
-   | `value_rows` | A table of label, copy button and value |
-   | `error_label` / `status_label` | Error messages and green or red status lines |
-   | `zone_picker` | A searchable IANA time zone picker |
-   | `save_file` | A native save dialog that writes bytes |
-   | `strength_bar` | An entropy-based strength meter |
-   | `human_size` | File sizes such as "1.5 MB" |
+   | `CodeEditor` | Multi-line code or data input and output. Unlike `TextEditor`, it never substitutes smart quotes or dashes. |
+   | `Pane`, `StatusBar` | Titled editor panes and a bottom status line, as in JSON Formatter |
+   | `CopyButton`, `ValueRow` | Copying, and label/value rows with a copy button |
+   | `StatusLabel`, `FormNote` | Success or failure messages, and explanatory footers |
+   | `SliderField` | A whole-number setting as a slider plus a number field |
+   | `ColorField`, `Swatch`, `CopySwatch` | Color input with the system eyedropper, and swatches |
+   | `ImageDropZone`, `ImageFiles`, `Files` | Opening, dropping, saving and revealing files |
+   | `ZoneList`, `ZonePickerButton` | A searchable IANA time zone picker |
+   | `offMainThread` | Running slow Rust calls without blocking the UI |
 
-   The color and image tools also share widgets in `color_widgets.rs` and `image_widgets.rs`.
-
-5. **Run the tests.** `every_tool_renders` opens your new tool automatically, so UI panics surface without any extra test code.
+   A tool that takes files should accept drops, and conform its model to `OpensFiles` so files opened from Finder reach it.
 
 ### Testing
 
-The suite has two layers:
-
 - **Core unit tests** (`crates/toolbox-core`): over 130 tests covering parsing, encoding, hashing, color math, image conversion and more. QR output is verified by decoding it again with `rqrr`.
-- **UI tests** (`apps/toolbox/src/main.rs`), built on [`egui_kittest`](https://github.com/emilk/egui/tree/master/crates/egui_kittest):
-  - `every_tool_renders` opens every tool and draws several frames to catch panics in UI code.
-  - `ui_text_uses_only_drawable_characters` fails if UI source contains a character egui's built-in fonts can't draw, which would otherwise appear as an empty box.
+- **FFI tests** (`crates/toolbox-ffi`): check the conversions between core and FFI types, such as byte offsets to UTF-16 ranges and option mapping, plus end-to-end calls like converting an image file.
 
-To save a screenshot of every tool, which is useful for reviewing UI changes or updating documentation, run:
+To check UI changes, build with `scripts/build-macos.sh --dev`. The app also accepts launch arguments that help with screenshots: `-selectedTool <case>` opens a tool, such as `-selectedTool json`, and `-appearance dark` or `-appearance light` overrides the system appearance:
 
 ```sh
-mkdir -p screenshots
-TOOLBOX_SCREENSHOTS=screenshots cargo test -p toolbox every_tool_renders
+open dist/Toolbox.app --args -selectedTool palettes -appearance dark
 ```
-
-Screenshots require a GPU adapter (via `wgpu`).
 
 ### Code conventions
 
-- **Keep logic out of the UI.** Anything that can be unit-tested belongs in `toolbox-core`.
-- **No `unsafe` by default.** `unsafe_code` is denied workspace-wide. The only exceptions are the two small macOS FFI modules (`eyedropper.rs` and `color_space.rs`), and each opts in with a documented `#[allow(unsafe_code)]`.
+- **Keep logic out of the UI.** Anything that can be unit-tested belongs in `toolbox-core`. The FFI layer only adapts types.
+- **No `unsafe`.** `unsafe_code` is forbidden workspace-wide.
 - **Clippy** warns on leftover `dbg!` and `todo!`. Keep `cargo clippy --workspace --all-targets` clean.
+- **Swift 6** with strict concurrency and `MainActor` as the default isolation. The build should produce no Swift warnings.
+- **Use `@ViewState`, not `@State`.** Since the macOS 27 SDK, `@State` is a macro whose plugin ships only with Xcode, so it doesn't compile with just the Command Line Tools. `@ViewState` is a typealias for the same property wrapper (see `App/StateWorkaround.swift`). Once the project requires Xcode, switch back and delete that file.
+- **Error messages:** show `error.message`, not `localizedDescription`, which UniFFI fills with the enum's debug description.
+- **Follow the macOS Human Interface Guidelines.** Use Title Case for buttons and menus, give toolbar items tooltips, and use semantic colors so everything works in dark mode.
 - **Shared dependencies** are declared once in `[workspace.dependencies]`, so every crate uses the same versions.
-- **UI text** should only use characters egui's fonts can draw. The test suite enforces this.
 - **Builds are reproducible.** `Cargo.lock` is committed, and release builds use `--locked`.
 
 ### Updating the app icon
@@ -308,18 +305,21 @@ The icon's source is `assets/icon/toolbox.svg`. After editing it, run:
 cargo xtask icon
 ```
 
-This renders `assets/icon/toolbox-512.png`, which is embedded in the binary as the window icon. On macOS it also builds `assets/icon/Toolbox.icns` for the app bundle. Commit the regenerated files.
+This renders `assets/icon/toolbox-512.png`, which this README uses, and `assets/icon/Toolbox.icns`, which goes in the app bundle. Commit the regenerated files.
 
 ## Releasing for macOS
 
 `scripts/build-macos.sh` builds `dist/Toolbox.app` and `dist/Toolbox-<version>.dmg`. The version comes from `[workspace.package]` in `Cargo.toml`.
 
 ```sh
-# Universal binary (Apple silicon + Intel), ad-hoc signed, with a disk image
+# Universal app (Apple silicon + Intel), ad-hoc signed, with a disk image
 scripts/build-macos.sh
 
 # Faster local build for this Mac's CPU only, without a disk image
 scripts/build-macos.sh --native --no-dmg
+
+# Like --native --no-dmg, but builds Swift in debug and opens the app
+scripts/build-macos.sh --dev
 ```
 
 For a build you can distribute, sign it with a Developer ID and notarize it:
@@ -341,24 +341,25 @@ The script installs any missing Rust targets with `rustup`, renders the icon if 
 
 ## Platform support
 
-Toolbox is developed and released for **macOS 11+**. The core library and most of the UI are platform-independent, but these features depend on macOS:
+Toolbox is a macOS app (macOS 14 or later). Its UI is SwiftUI and AppKit, and it uses these system features:
 
-| Feature | macOS | Other platforms |
-| --- | --- | --- |
-| Screen eyedropper (Color Picker) | Supported (`NSColorSampler`) | Unavailable; colors can still be typed in |
-| Opening HEIC/HEIF images | Supported (via `sips`) | Unsupported |
-| `.icns` generation in `cargo xtask icon` | Supported (via `iconutil`) | Skipped; the PNG icon is still rendered |
-| sRGB-tagged window | Supported | Not applicable |
-| `.app` / `.dmg` packaging | Supported | Not provided |
+| Feature | Provided by |
+| --- | --- |
+| Screen eyedropper (color tools) | `NSColorSampler`. No screen-recording permission is needed. |
+| Opening HEIC/HEIF images | `sips` |
+| Markdown preview | WebKit (`WKWebView`) |
+| Opening images from Finder or the Dock | The app's document types (`public.image`) |
+
+`toolbox-core` itself is platform-independent Rust, apart from HEIC decoding.
 
 ## Contributing
 
 Contributions are welcome. Before opening a pull request:
 
 1. Put new logic in `toolbox-core` and give it unit tests.
-2. Run `cargo fmt --all`, `cargo clippy --workspace --all-targets` and `cargo test --workspace`, and make sure all three pass cleanly.
+2. Run `cargo fmt --all`, `cargo clippy --workspace --all-targets` and `cargo test --workspace`, and make sure all three pass cleanly. Build the app with `scripts/build-macos.sh --dev` and make sure Swift reports no warnings.
 3. Keep each commit focused, with a message that explains the change.
-4. For UI changes, include before and after screenshots (see [Testing](#testing)).
+4. For UI changes, include before and after screenshots in light and dark mode (see [Testing](#testing)).
 
 Use [GitHub Issues](https://github.com/umairgul/rusty-toolbox/issues) to report a bug or suggest a tool.
 
