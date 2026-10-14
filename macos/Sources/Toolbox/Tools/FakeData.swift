@@ -18,7 +18,8 @@ final class FakeDataModel {
 
     fileprivate var options: FakeDataOptions {
         FakeDataOptions(
-            rows: UInt32(clamping: rows),
+            // The rows field takes any number; only the stepper keeps to the limits.
+            rows: UInt32(clamping: min(max(rows, 1), Self.maxRows)),
             fields: Self.allFields.filter(fields.contains),
             format: format,
             table: table

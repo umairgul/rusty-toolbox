@@ -51,10 +51,10 @@ struct GradientsView: View {
         let css = gradientsCss(stops: colors, angle: model.angle, space: model.space)
         Form {
             Section("Stops") {
-                ForEach($model.stops) { $stop in
+                ForEach(model.stops) { stop in
                     LabeledContent("Stop \((model.stops.firstIndex { $0.id == stop.id } ?? 0) + 1)") {
                         HStack(alignment: .top, spacing: 8) {
-                            ColorField(color: $stop.color)
+                            ColorField(color: color(of: stop))
                             if model.canRemoveStop {
                                 Button("Remove Stop", systemImage: "minus.circle") {
                                     model.removeStop(stop.id)
@@ -127,6 +127,18 @@ struct GradientsView: View {
                 Button("Add Stop", systemImage: "plus") { model.addStop() }
                     .disabled(!model.canAddStop)
                     .help("Add a color stop")
+            }
+        }
+    }
+
+    /// A stop's color, looked up by id. `ForEach($model.stops)` hands out bindings by index,
+    /// which crash with "Index out of range" when a removed stop's row updates once more.
+    private func color(of stop: GradientsModel.Stop) -> Binding<RgbaColor> {
+        Binding {
+            model.stops.first { $0.id == stop.id }?.color ?? stop.color
+        } set: { color in
+            if let index = model.stops.firstIndex(where: { $0.id == stop.id }) {
+                model.stops[index].color = color
             }
         }
     }

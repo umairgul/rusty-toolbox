@@ -5,9 +5,14 @@ import ToolboxBindings
 final class LoremModel {
     var options = loremDefaultOptions() {
         didSet {
-            // Switching to a unit with a lower limit brings the count down to it. Setting a
-            // property in its own didSet doesn't call didSet again.
-            options.count = min(options.count, loremMaxCount(unit: options.unit))
+            // Switching to a unit with a lower limit brings the count down to it. With
+            // @Observable, setting the property in its own didSet *does* call didSet again,
+            // so only write when clamping is needed; the re-entrant call then regenerates.
+            let maxCount = loremMaxCount(unit: options.unit)
+            if options.count > maxCount {
+                options.count = maxCount
+                return
+            }
             if options != oldValue { regenerate() }
         }
     }
